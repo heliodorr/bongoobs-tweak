@@ -205,6 +205,10 @@ private:
     Csm::csmFloat32 s_currentFrame;
     Csm::csmFloat32 s_lastFrame;
     Csm::csmFloat32 s_deltaTime;
+    Csm::csmBool _isRightHandModel;
+
+    Csm::csmBool IsRightHandModelPath(const Csm::csmChar* dir, const Csm::csmChar* fileName) const;
+    Csm::csmFloat32 ApplyMiddleBendProfile(Csm::csmFloat32 normalized) const;
 };
 
 

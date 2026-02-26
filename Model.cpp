@@ -8,6 +8,10 @@
 #include "Model.hpp"
 #include <fstream>
 #include <vector>
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <string>
 #include <CubismModelSettingJson.hpp>
 #include <Motion/CubismMotion.hpp>
 #include <Physics/CubismPhysics.hpp>
@@ -52,6 +56,7 @@ Model::Model()
 	  s_deltaTime(0.0f),
 	  rButton(false),
 	  lButton(false),
+	  _isRightHandModel(false),
 	  isMouseHorizontalFlip(true),
 	  IsMouseVerticalFlip(true)
 
@@ -86,6 +91,7 @@ Model::~Model()
 csmBool Model::LoadAssets(const csmChar* dir, const csmChar* fileName)
 {
     _modelHomeDir = dir;
+    _isRightHandModel = IsRightHandModelPath(dir, fileName);
 
     csmSizeInt size;
     const csmString path = csmString(dir) + fileName;
@@ -412,15 +418,26 @@ void Model::Update(Csm::csmUint16 _id)
 	    _model->AddParameterValue(_idParamEyeBallY, (1 - mouseY) * 30); ///< パラメータID: ParamEyeBallXY	   
     }
 
+    csmFloat32 mappedMouseX = mouseX;
+    csmFloat32 mappedMouseY = mouseY;
+
+    // Keep the mouse-side segment visually straighter by concentrating bend response
+    // around the middle of the motion range for right-hand model rigs.
+    if (_isRightHandModel)
+    {
+        mappedMouseX = ApplyMiddleBendProfile(mappedMouseX);
+        mappedMouseY = ApplyMiddleBendProfile(mappedMouseY);
+    }
+
     if (isMouseHorizontalFlip)
-	  _model->AddParameterValue(_idParamMouseX, mouseX * 60 - 30);
+	  _model->AddParameterValue(_idParamMouseX, mappedMouseX * 60 - 30);
     else 
-	  _model->AddParameterValue(_idParamMouseX, (1-mouseX) * 60 - 30);
+	  _model->AddParameterValue(_idParamMouseX, (1-mappedMouseX) * 60 - 30);
 
     if (IsMouseVerticalFlip)
-	_model->AddParameterValue(_idParamMouseY, (1 - mouseY) * 60 - 30);
+	_model->AddParameterValue(_idParamMouseY, (1 - mappedMouseY) * 60 - 30);
     else 
-	_model->AddParameterValue(_idParamMouseY, mouseY * 60 - 30);
+	_model->AddParameterValue(_idParamMouseY, mappedMouseY * 60 - 30);
 
     if (rButton)
 	    _model->AddParameterValue(_idParamRightButton, 1);
@@ -706,6 +723,25 @@ void Model::UpdateTime() {
 		s_currentFrame = glfwGetTime();
 		s_deltaTime = s_currentFrame - s_lastFrame;
 		s_lastFrame = s_currentFrame;
+}
+
+Csm::csmBool Model::IsRightHandModelPath(const csmChar* dir, const csmChar* fileName) const
+{
+    std::string modelPath = std::string(dir) + fileName;
+    std::transform(modelPath.begin(), modelPath.end(), modelPath.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+
+    return modelPath.find("right hand") != std::string::npos
+        || modelPath.find("righthand") != std::string::npos
+        || modelPath.find("right_hand") != std::string::npos;
+}
+
+Csm::csmFloat32 Model::ApplyMiddleBendProfile(csmFloat32 normalized) const
+{
+    const csmFloat32 clamped = std::max(0.0f, std::min(1.0f, normalized));
+    const csmFloat32 centered = clamped * 2.0f - 1.0f;
+    const csmFloat32 centerBias = centered * (1.0f - 0.55f * fabsf(centered));
+    return std::max(0.0f, std::min(1.0f, (centerBias + 1.0f) * 0.5f));
 }
 
 

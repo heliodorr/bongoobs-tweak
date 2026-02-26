@@ -1,0 +1,82 @@
+name: Build OBS Plugin
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  windows-build:
+    runs-on: windows-2022
+    env:
+      OBS_REF: 30.2.3
+      PLUGIN_ID: bongobs-cat
+      PLUGIN_DIR: bongobs-cat
+
+    steps:
+      - name: Checkout plugin repo
+        uses: actions/checkout@v4
+
+      - name: Clone OBS Studio
+        shell: pwsh
+        run: |
+          git clone --recursive --depth 1 --branch $env:OBS_REF https://github.com/obsproject/obs-studio.git obs-studio
+
+      - name: Copy plugin into OBS tree
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "obs-studio/plugins/$env:PLUGIN_DIR" | Out-Null
+          robocopy "$env:GITHUB_WORKSPACE" "obs-studio/plugins/$env:PLUGIN_DIR" /E /XD ".git" ".github" | Out-Null
+          if ($LASTEXITCODE -gt 7) { throw "robocopy failed with exit code $LASTEXITCODE" }
+
+      - name: Register plugin in OBS CMake
+        shell: pwsh
+        run: |
+          $pluginsCmake = "obs-studio/plugins/CMakeLists.txt"
+          $line = "add_subdirectory($env:PLUGIN_DIR)"
+          $text = Get-Content $pluginsCmake -Raw
+          if ($text -notmatch [regex]::Escape($line)) {
+            Add-Content -Path $pluginsCmake -Value "`n$line`n"
+          }
+
+      - name: Configure OBS
+        shell: pwsh
+        run: |
+          cmake --preset windows-x64 -S obs-studio
+
+      - name: Build plugin target
+        shell: pwsh
+        run: |
+          cmake --build --preset windows-x64 --config RelWithDebInfo --target $env:PLUGIN_ID
+
+      - name: Collect artifact
+        shell: pwsh
+        run: |
+          $artifactDir = "artifact/$env:PLUGIN_DIR"
+          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+
+          $dll = Get-ChildItem -Path "obs-studio" -Recurse -File -Filter "$env:PLUGIN_ID.dll" | Select-Object -First 1
+          if (-not $dll) { throw "Could not find $env:PLUGIN_ID.dll" }
+          Copy-Item $dll.FullName "$artifactDir/"
+
+          $pdb = Get-ChildItem -Path "obs-studio" -Recurse -File -Filter "$env:PLUGIN_ID.pdb" | Select-Object -First 1
+          if ($pdb) { Copy-Item $pdb.FullName "$artifactDir/" }
+
+          if (Test-Path "data") {
+            Copy-Item "data" "$artifactDir/data" -Recurse -Force
+          }
+
+          @"
+          Install to OBS:
+          - DLL -> obs-studio\obs-plugins\64bit\
+          - Data -> obs-studio\data\obs-plugins\bongobs-cat\
+          "@ | Set-Content "$artifactDir/INSTALL.txt"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bongobs-cat-windows
+          path: artifact/**
+          if-no-files-found: error

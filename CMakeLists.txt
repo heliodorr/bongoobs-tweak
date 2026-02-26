@@ -14,12 +14,12 @@ set(RES_PATH ${SDK_ROOT_PATH}/Resources)
 project(${APP_NAME})
 
 # Detect architecture.
-if(CMAKE_EXE_LINKER_FLAGS STREQUAL "/machine:x64 /OPT:REF")
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
   set(ARCH x86_64)
-elseif(CMAKE_EXE_LINKER_FLAGS STREQUAL "/machine:x86 /OPT:REF")
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
   set(ARCH x86)
 else()
-  message(FATAL_ERROR "[${APP_NAME}] Invalid linker flag ${CMAKE_EXE_LINKER_FLAGS}.")
+  message(FATAL_ERROR "[${APP_NAME}] Unsupported architecture.")
 endif()
 
 # Detect compiler.
@@ -34,6 +34,10 @@ elseif(MSVC_VERSION GREATER_EQUAL 1910 AND MSVC_VERSION LESS 1920)
   set(COMPILER 141)
 elseif(MSVC_VERSION GREATER_EQUAL 1920 AND MSVC_VERSION LESS 1930)
   # Visual Studio 2019
+  set(COMPILER 142)
+elseif(MSVC_VERSION GREATER_EQUAL 1930 AND MSVC_VERSION LESS 1940)
+  # Visual Studio 2022
+  # Cubism libs in this repo are packaged up to 142; using 142 libs works with v143 toolset.
   set(COMPILER 142)
 elseif(MSVC)
   message(FATAL_ERROR "[${APP_NAME}] Unsupported Visual C++ compiler used.")
@@ -101,7 +105,7 @@ set(${APP_NAME}_SOURCES
         Hook.cpp
 	EventManager.cpp
 	Define.cpp
-	json.cpp
+	jsoncpp.cpp
 	InfoReader.cpp
 	)
 
